@@ -143,12 +143,13 @@ class Communication:
         print(f"Nœud {self.id or self.temp_id} transition {old_state.value} -> {new_state.value}")
         
         # Créer la nouvelle machine à états
-        if new_state == NodeState.FOLLOWER:
-            self.state_machine = FollowerState(self)
-        elif new_state == NodeState.CANDIDATE:
-            self.state_machine = CandidateState(self)
-        elif new_state == NodeState.LEADER:
-            self.state_machine = LeaderState(self)
+        match new_state:
+            case NodeState.FOLLOWER:
+                self.state_machine = FollowerState(self)
+            case NodeState.CANDIDATE:
+                self.state_machine = CandidateState(self)
+            case NodeState.LEADER:
+                self.state_machine = LeaderState(self)
         
         # Entrer dans le nouvel état
         if self.state_machine:
@@ -183,21 +184,22 @@ class Communication:
         self.update_lamport_clock(message.timestamp)
         
         # Traiter les messages spéciaux pour la phase d'initialisation
-        if isinstance(message, RegistrationResponse) and not self.is_registered:
-            self.handle_registration_response(message)
-            return True
-        elif isinstance(message, WorldUpdateMessage):
-            self.handle_world_update(message)
-            return True
-        elif isinstance(message, HeartbeatMessage) and not self.is_registered:
-            # Si on reçoit un heartbeat et qu'on n'est pas enregistré, demander l'enregistrement
-            self.handle_heartbeat_during_initialization(message)
-            return True
-        
-        # Déléguer à la machine à états appropriée
-        if self.state_machine:
-            self.state_machine.handle_message(message)
-            return True
+        match message:
+            case RegistrationResponse() if not self.is_registered:
+                self.handle_registration_response(message)
+                return True
+            case WorldUpdateMessage():
+                self.handle_world_update(message)
+                return True
+            case HeartbeatMessage() if not self.is_registered:
+                # Si on reçoit un heartbeat et qu'on n'est pas enregistré, demander l'enregistrement
+                self.handle_heartbeat_during_initialization(message)
+                return True
+            case _:
+                # Déléguer à la machine à états appropriée
+                if self.state_machine:
+                    self.state_machine.handle_message(message)
+                    return True
         
         return False
     

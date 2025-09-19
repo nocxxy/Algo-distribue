@@ -51,16 +51,17 @@ class LeaderState(StateMachine):
     
     def handle_message(self, message):
         """Traite les messages reçus en tant que LEADER"""
-        if isinstance(message, (VoteResponseMessage, HeartbeatMessage)):
-            return  # Ignorer les réponses de vote et les heartbeats des autres leaders
-        elif isinstance(message, RequestVoteMessage):
-            self.handle_vote_request(message)
-        elif isinstance(message, RegistrationRequest):
-            self.handle_registration_request(message)
-        elif isinstance(message, AliveMessage):
-            self.handle_new_node_discovery(message)
-        else:
-            self.communication.addLetterMessage(message)
+        match message:
+            case VoteResponseMessage() | HeartbeatMessage():
+                return  # Ignorer les réponses de vote et les heartbeats des autres leaders
+            case RequestVoteMessage():
+                self.handle_vote_request(message)
+            case RegistrationRequest():
+                self.handle_registration_request(message)
+            case AliveMessage():
+                self.handle_new_node_discovery(message)
+            case _:
+                self.communication.addLetterMessage(message)
     
     def handle_registration_request(self, message):
         """Traite une demande d'enregistrement d'un nouveau nœud"""
