@@ -13,11 +13,20 @@ class FollowerState(StateMachine):
     
     def enter_state(self):
         """Entrée dans l'état FOLLOWER"""
-        print(f"Nœud {self.communication.id} entre en état FOLLOWER (terme {self.communication.current_term})")
+        print(f"Nœud {self.communication.id or self.communication.temp_id} entre en état FOLLOWER (terme {self.communication.current_term})")
         self.reset_election_timeout()
+    
+    def cleanup(self):
+        """Nettoie les timers avant de quitter l'état FOLLOWER"""
+        if self.heartbeat_timeout:
+            self.heartbeat_timeout.cancel()
+            self.heartbeat_timeout = None
     
     def reset_election_timeout(self):
         """Remet à zéro le timeout d'élection"""
+        if self.heartbeat_timeout:
+            self.heartbeat_timeout.cancel()
+        
         if self.communication.alive:
             self.heartbeat_timeout = Timer(self.election_timeout, self.on_timeout)
             self.heartbeat_timeout.start()
@@ -49,11 +58,18 @@ class FollowerState(StateMachine):
           
     def handle_heartbeat(self, message):
         """Traite un heartbeat du leader"""
+        # Vérifier que ce n'est pas notre propre heartbeat
+        if message.source == self.communication.id or message.source == self.communication.temp_id:
+            return
+            
         if message.term >= self.communication.current_term:
             self.communication.current_term = message.term
             self.communication.leader_id = message.source
+            self.communication.voted_for = None  # Reset du vote
             self.reset_election_timeout()
-            print(f"Nœud {self.communication.id} reçoit heartbeat du leader {message.source}")
+            print(f"Nœud {self.communication.id or self.communication.temp_id} reçoit heartbeat du leader {message.source} (terme {message.term})")
+        elif message.term < self.communication.current_term:
+            print(f"Nœud {self.communication.id or self.communication.temp_id} ignore heartbeat obsolète du nœud {message.source} (terme {message.term} < {self.communication.current_term})")
     
     def handle_vote_request(self, message):
         """Traite une demande de vote"""

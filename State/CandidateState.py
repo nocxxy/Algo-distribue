@@ -15,6 +15,12 @@ class CandidateState(StateMachine):
         """Entrée dans l'état CANDIDATE"""
         self.start_election()
     
+    def cleanup(self):
+        """Nettoie les timers avant de quitter l'état CANDIDATE"""
+        if self.election_timeout:
+            self.election_timeout.cancel()
+            self.election_timeout = None
+    
     def start_election(self):
         """Démarre une nouvelle élection"""
         # Incrémenter le terme et voter pour soi-même
@@ -66,6 +72,10 @@ class CandidateState(StateMachine):
     
     def handle_vote_response(self, message):
         """Traite une réponse de vote"""
+        # Ignorer ses propres réponses
+        if message.source == self.communication.id or message.source == self.communication.temp_id:
+            return
+            
         if message.term > self.communication.current_term:
             # Terme plus récent, redevenir follower
             self.communication.current_term = message.term
@@ -74,12 +84,14 @@ class CandidateState(StateMachine):
         
         if message.term == self.communication.current_term and message.vote_granted:
             self.communication.votes_received.add(message.source)
-            print(f"Nœud {self.communication.id} reçoit vote de {message.source}")
+            print(f"Nœud {self.communication.id} reçoit vote de {message.source} ({len(self.communication.votes_received)} votes)")
             
             # Vérifier si on a la majorité
-            majority = (len(self.communication.world) + 1) // 2 + 1
+            majority = (len(self.communication.world) // 2) + 1
+            print(f"Majorité requise: {majority}, monde: {self.communication.world}")
+            
             if len(self.communication.votes_received) >= majority:
-                print(f"Nœud {self.communication.id} élu LEADER avec {len(self.communication.votes_received)} votes")
+                print(f"Nœud {self.communication.id} élu LEADER avec {len(self.communication.votes_received)} votes sur {len(self.communication.world)} nœuds")
                 self.communication.transition_to_state(NodeState.LEADER)
     
     def handle_heartbeat(self, message):
@@ -109,5 +121,4 @@ class CandidateState(StateMachine):
     def on_timeout(self):
         """Timeout d'élection - recommencer une élection"""
         print(f"Nœud {self.communication.id} timeout d'élection - recommence")
-        if self.communication.alive:
-            self.start_election()
+        self.start_election()

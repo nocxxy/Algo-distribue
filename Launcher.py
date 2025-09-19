@@ -20,4 +20,4 @@ def launch(nbProcess, runningTime=5):
 
 if __name__ == '__main__':
     # Augmenter le temps pour permettre plus de chances d'élection
-    launch(nbProcess=3, runningTime=5)  # Temps augmenté pour laisser plus de chances à l'élection
+    launch(nbProcess=3, runningTime=20)  # Temps augmenté pour laisser plus de chances à l'élection

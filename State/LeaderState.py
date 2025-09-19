@@ -24,6 +24,12 @@ class LeaderState(StateMachine):
         
         self.start_heartbeat()
     
+    def cleanup(self):
+        """Nettoie les timers avant de quitter l'état LEADER"""
+        if self.heartbeat_timer:
+            self.heartbeat_timer.cancel()
+            self.heartbeat_timer = None
+    
     def start_heartbeat(self):
         """Démarre l'envoi régulier de heartbeats"""
         if self.communication.alive:

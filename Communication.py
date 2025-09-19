@@ -37,6 +37,7 @@ class Communication:
         self.discovery_timer = None
         self.registration_timer = None
         self.is_registered = False
+        self.alive = True  # Flag pour arrêter proprement les timers
 
     def init(self):
         """Initialise la communication et démarre le processus de découverte"""
@@ -132,8 +133,15 @@ class Communication:
     
     def transition_to_state(self, new_state):
         """Change l'état du nœud"""
+        # Nettoyer l'ancien état et annuler ses timers
+        if self.state_machine:
+            self.state_machine.cleanup()
+        
+        old_state = self.state
         self.state = new_state
-                
+        
+        print(f"Nœud {self.id or self.temp_id} transition {old_state.value} -> {new_state.value}")
+        
         # Créer la nouvelle machine à états
         if new_state == NodeState.FOLLOWER:
             self.state_machine = FollowerState(self)
@@ -148,6 +156,10 @@ class Communication:
     
     def send_message_to(self, target_id, message):
         """Envoie un message à un nœud spécifique"""
+        # Ne pas s'envoyer de message à soi-même
+        if target_id == self.id or target_id == self.temp_id:
+            return
+            
         # Simulation d'envoi - dans un vrai système, cela passerait par le réseau
         print(f"Envoi de {type(message).__name__} de {message.source} vers {target_id}")
         
@@ -161,9 +173,11 @@ class Communication:
     
     def _handle_message_common(self, message):
         """Logique commune pour tous les messages"""
-        # Ignorer ses propres messages
-        if message.source == self.id or message.source == self.temp_id:
-            return
+        # Ignorer ses propres messages - vérifier à la fois l'ID permanent et temporaire
+        if (message.source == self.id or 
+            message.source == self.temp_id or 
+            (hasattr(message, 'source') and message.source in [self.id, self.temp_id])):
+            return False
         
         # Mettre à jour l'horloge de Lamport
         self.update_lamport_clock(message.timestamp)
@@ -171,18 +185,21 @@ class Communication:
         # Traiter les messages spéciaux pour la phase d'initialisation
         if isinstance(message, RegistrationResponse) and not self.is_registered:
             self.handle_registration_response(message)
-            return
+            return True
         elif isinstance(message, WorldUpdateMessage):
             self.handle_world_update(message)
-            return
+            return True
         elif isinstance(message, HeartbeatMessage) and not self.is_registered:
             # Si on reçoit un heartbeat et qu'on n'est pas enregistré, demander l'enregistrement
             self.handle_heartbeat_during_initialization(message)
-            return
+            return True
         
         # Déléguer à la machine à états appropriée
         if self.state_machine:
             self.state_machine.handle_message(message)
+            return True
+        
+        return False
     
     @subscribe(threadMode=Mode.PARALLEL, onEvent=AliveMessage)
     def handle_alive_message(self, message):
@@ -306,6 +323,22 @@ class Communication:
     def get_rank(self):
         """Retourne l'ID du nœud"""
         return self.id if self.id is not None else self.temp_id
+    
+    def stop(self):
+        """Arrête proprement la communication et nettoie les ressources"""
+        self.alive = False
+        
+        # Nettoyer les timers
+        if self.discovery_timer:
+            self.discovery_timer.cancel()
+        if self.registration_timer:
+            self.registration_timer.cancel()
+        
+        # Nettoyer l'état actuel
+        if self.state_machine:
+            self.state_machine.cleanup()
+        
+        print(f"Nœud {self.id or self.temp_id} arrêté proprement")
 
     def stop(self):
         """Arrête la communication et les timers"""
