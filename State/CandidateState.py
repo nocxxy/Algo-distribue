@@ -23,6 +23,17 @@ class CandidateState(StateMachine):
     
     def start_election(self):
         """Démarre une nouvelle élection"""
+        # Vérifier si le nœud est toujours vivant
+        if not self.communication.alive:
+            print(f"Nœud {self.communication.id} arrêté, pas d'élection")
+            return
+            
+        # Si on est seul, devenir leader directement
+        if len(self.communication.world) <= 1:
+            print(f"Nœud {self.communication.id} seul dans le monde, devient leader directement")
+            self.communication.transition_to_state(NodeState.LEADER)
+            return
+        
         # Incrémenter le terme et voter pour soi-même
         self.communication.current_term += 1
         self.communication.voted_for = self.communication.id
@@ -99,7 +110,13 @@ class CandidateState(StateMachine):
         if message.term >= self.communication.current_term:
             self.communication.current_term = message.term
             self.communication.leader_id = message.source
-            print(f"Nœud {self.communication.id} reconnaît le leader {message.source}")
+            
+            # Mettre à jour le monde avec celui reçu du leader
+            if hasattr(message, 'world_nodes') and message.world_nodes:
+                self.communication.world = message.world_nodes.copy()
+                print(f"Candidat {self.communication.id} met à jour son monde: {self.communication.world}")
+            
+            print(f"Candidat {self.communication.id} reconnaît le leader {message.source}")
             self.communication.transition_to_state(NodeState.FOLLOWER)
     
     def handle_vote_request(self, message):

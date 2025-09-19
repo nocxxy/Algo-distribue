@@ -8,8 +8,11 @@ class LeaderState(StateMachine):
     def __init__(self, communication):
         super().__init__(communication)
         self.heartbeat_timer = None
-        self.heartbeat_interval = 2  # Envoyer un heartbeat toutes les 2 secondes
+        self.heartbeat_interval = 3  # Envoyer un heartbeat toutes les 3 secondes
+        self.heartbeat_timeout = 5   # Timeout pour les confirmations
         self.next_node_id = max(self.communication.world) + 1 if self.communication.world else 1
+        self.heartbeat_confirmations = set()  # Confirmations reçues pour le heartbeat actuel
+        self.waiting_for_confirmations = False
     
     def enter_state(self):
         """Entrée dans l'état LEADER"""
@@ -32,28 +35,78 @@ class LeaderState(StateMachine):
     
     def start_heartbeat(self):
         """Démarre l'envoi régulier de heartbeats"""
+        if not self.communication.alive:
+            print(f"Leader {self.communication.id} arrêté, pas de heartbeat")
+            return
+            
+        self.send_heartbeat()
+        # Programmer le prochain heartbeat seulement si toujours vivant
         if self.communication.alive:
-            self.send_heartbeat()
             self.heartbeat_timer = Timer(self.heartbeat_interval, self.start_heartbeat)
             self.heartbeat_timer.start()
-
     
     def send_heartbeat(self):
-        """Envoie un heartbeat à tous les followers"""
+        """Envoie un heartbeat en broadcast avec le monde connu"""
+        if not self.communication.alive:
+            print(f"Leader {self.communication.id} arrêté, pas d'envoi de heartbeat")
+            return
+            
+        print(f"Leader {self.communication.id} envoie heartbeat avec monde: {self.communication.world}")
+        
+        # Réinitialiser les confirmations pour ce cycle
+        self.heartbeat_confirmations = set()
+        self.waiting_for_confirmations = True
+        
+        # Créer le heartbeat avec le monde actuel
         heartbeat = HeartbeatMessage(
             self.communication.id,
             self.communication.get_lamport_timestamp(),
-            self.communication.current_term
+            self.communication.current_term,
+            self.communication.world.copy()  # Inclure le monde connu
         )
-        for node_id in self.communication.world:
-            if node_id != self.communication.id:
-                self.communication.send_message_to(node_id, heartbeat)
+        
+        # Envoyer en broadcast
+        self.communication.broadcast_message(heartbeat)
+        
+        # Programmer le timeout pour vérifier les confirmations seulement si vivant
+        if self.communication.alive:
+            Timer(self.heartbeat_timeout, self.check_heartbeat_responses).start()
+    
+    def check_heartbeat_responses(self):
+        """Vérifie les réponses de heartbeat et met à jour le monde"""
+        # Vérifier si le nœud est toujours vivant
+        if not self.communication.alive or not self.waiting_for_confirmations:
+            return
+        
+        self.waiting_for_confirmations = False
+        
+        # Nœuds qui devraient répondre (tous sauf le leader)
+        expected_responses = self.communication.world - {self.communication.id}
+        
+        # Nœuds qui n'ont pas répondu
+        missing_nodes = expected_responses - self.heartbeat_confirmations
+        
+        if missing_nodes:
+            print(f"Leader {self.communication.id} détecte des nœuds en panne: {missing_nodes}")
+            
+            # Retirer les nœuds en panne du monde
+            for failed_node in missing_nodes:
+                self.communication.world.discard(failed_node)
+            
+            print(f"Nouveau monde après détection de pannes: {self.communication.world}")
+            
+            # Si le leader est seul, on peut le laisser continuer ou l'arrêter
+            # Pour éviter la boucle infinie, on continue normalement
+        else:
+            print(f"Leader {self.communication.id} reçoit confirmations de tous les nœuds: {self.heartbeat_confirmations}")
     
     def handle_message(self, message):
         """Traite les messages reçus en tant que LEADER"""
         match message:
             case VoteResponseMessage() | HeartbeatMessage():
                 return  # Ignorer les réponses de vote et les heartbeats des autres leaders
+            case HeartbeatConfirmationMessage():
+                self.handle_heartbeat_confirmation(message)
             case RequestVoteMessage():
                 self.handle_vote_request(message)
             case RegistrationRequest():
@@ -62,6 +115,12 @@ class LeaderState(StateMachine):
                 self.handle_new_node_discovery(message)
             case _:
                 self.communication.addLetterMessage(message)
+    
+    def handle_heartbeat_confirmation(self, message):
+        """Traite une confirmation de heartbeat d'un follower"""
+        if self.waiting_for_confirmations:
+            self.heartbeat_confirmations.add(message.source)
+            print(f"Leader {self.communication.id} reçoit confirmation de {message.source}")
     
     def handle_registration_request(self, message):
         """Traite une demande d'enregistrement d'un nouveau nœud"""

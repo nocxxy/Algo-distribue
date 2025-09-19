@@ -32,6 +32,7 @@ class Process(Thread):
             
             if self.communication.hasLetterMessage():
                 message = self.communication.retrieveLetterMessage()
+                print(f"[Node {self.myId}] 📩 Reçu: {message}")
                 
             # Log périodique
             if loop % 100 == 0:  # Toutes les secondes (10ms * 100)
@@ -43,13 +44,14 @@ class Process(Thread):
         print(f"[Node {self.myId}] 🛑 Arrêté")
 
     def stop(self):
-        self.communication.stop()
         self.alive = False
+        self.communication.stop()
 
     def waitStopped(self):
         self.join()
 
     def getId(self):
         return self.communication.get_rank()
+
     
 

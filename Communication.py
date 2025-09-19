@@ -161,14 +161,19 @@ class Communication:
         if target_id == self.id or target_id == self.temp_id:
             return
             
+        # Marquer le message comme ciblé
+        message.target = target_id
+        
         # Simulation d'envoi - dans un vrai système, cela passerait par le réseau
         print(f"Envoi de {type(message).__name__} de {message.source} vers {target_id}")
         
-        # Pour la simulation, on peut utiliser PyBus pour distribuer localement
+        # Pour la simulation, on utilise PyBus mais avec un target spécifique
         PyBus.Instance().post(message)
     
     def broadcast_message(self, message):
         """Diffuse un message à tous les nœuds connus"""
+        # Marquer explicitement comme broadcast
+        message.target = None
         print(f"Broadcast de {type(message).__name__} depuis {message.source}")
         PyBus.Instance().post(message)
     
@@ -178,6 +183,11 @@ class Communication:
         if (message.source == self.id or 
             message.source == self.temp_id or 
             (hasattr(message, 'source') and message.source in [self.id, self.temp_id])):
+            return False
+        
+        # Vérifier si le message est destiné à ce nœud
+        if not message.is_for_me(self.id) and not message.is_for_me(self.temp_id):
+            # Message pas pour nous, l'ignorer
             return False
         
         # Mettre à jour l'horloge de Lamport
@@ -221,6 +231,11 @@ class Communication:
     @subscribe(threadMode=Mode.PARALLEL, onEvent=HeartbeatMessage)
     def handle_heartbeat_message(self, message):
         """Gestionnaire pour les messages HeartbeatMessage"""
+        self._handle_message_common(message)
+
+    @subscribe(threadMode=Mode.PARALLEL, onEvent=HeartbeatConfirmationMessage)
+    def handle_heartbeat_confirmation_message(self, message):
+        """Gestionnaire pour les messages HeartbeatConfirmationMessage"""
         self._handle_message_common(message)
 
     @subscribe(threadMode=Mode.PARALLEL, onEvent=RequestVoteMessage)

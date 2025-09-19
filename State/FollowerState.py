@@ -27,6 +27,7 @@ class FollowerState(StateMachine):
         if self.heartbeat_timeout:
             self.heartbeat_timeout.cancel()
         
+        # Ne démarrer un nouveau timer que si le nœud est vivant
         if self.communication.alive:
             self.heartbeat_timeout = Timer(self.election_timeout, self.on_timeout)
             self.heartbeat_timeout.start()
@@ -57,17 +58,40 @@ class FollowerState(StateMachine):
                 return
           
     def handle_heartbeat(self, message):
-        """Traite un heartbeat du leader"""
+        """Traite un heartbeat du leader et envoie confirmation"""
         # Vérifier que ce n'est pas notre propre heartbeat
         if message.source == self.communication.id or message.source == self.communication.temp_id:
+            return
+        
+        # Vérifier que le nœud est toujours vivant avant de répondre
+        if not self.communication.alive:
+            print(f"Nœud {self.communication.id or self.communication.temp_id} est arrêté, n'envoie pas de confirmation")
             return
             
         if message.term >= self.communication.current_term:
             self.communication.current_term = message.term
             self.communication.leader_id = message.source
             self.communication.voted_for = None  # Reset du vote
+            
+            # Mettre à jour le monde avec celui reçu du leader
+            if hasattr(message, 'world_nodes') and message.world_nodes:
+                old_world = self.communication.world.copy()
+                self.communication.world = message.world_nodes.copy()
+                if old_world != self.communication.world:
+                    print(f"Nœud {self.communication.id or self.communication.temp_id} met à jour son monde: {old_world} -> {self.communication.world}")
+            
             self.reset_election_timeout()
             print(f"Nœud {self.communication.id or self.communication.temp_id} reçoit heartbeat du leader {message.source} (terme {message.term})")
+            
+            # Envoyer confirmation de vie au leader
+            confirmation = HeartbeatConfirmationMessage(
+                self.communication.id or self.communication.temp_id,
+                self.communication.get_lamport_timestamp(),
+                self.communication.current_term
+            )
+            self.communication.send_message_to(message.source, confirmation)
+            print(f"Nœud {self.communication.id or self.communication.temp_id} envoie confirmation au leader {message.source}")
+            
         elif message.term < self.communication.current_term:
             print(f"Nœud {self.communication.id or self.communication.temp_id} ignore heartbeat obsolète du nœud {message.source} (terme {message.term} < {self.communication.current_term})")
     
@@ -118,10 +142,24 @@ class FollowerState(StateMachine):
     
     def on_timeout(self):
         """Timeout d'élection - lance la phase de distribution d'ID puis devient candidat"""
-        if not self.communication.is_registered and hasattr(self.communication, 'temp_world') and self.communication.alive:
+        # Vérifier si le nœud est toujours vivant
+        if not self.communication.alive:
+            print(f"Nœud {self.communication.id or self.communication.temp_id} arrêté, pas de timeout d'élection")
+            return
+            
+        # Phase d'initialisation - distribution d'ID
+        if not self.communication.is_registered and hasattr(self.communication, 'temp_world'):
             print(f"Nœud {self.communication.temp_id} timeout d'élection - lance distribution d'ID puis élection")
             self.communication.distribute_ids()
-        if self.communication.alive:
-            # Devenir candidat après distribution d'ID
-            print(f"Nœud {self.communication.id} devient CANDIDAT")
+            return
+        
+        # Phase normale - vérifier s'il faut vraiment lancer une élection
+        if self.communication.is_registered and self.communication.alive:
+            # Si on est seul dans le monde, pas besoin d'élection
+            if len(self.communication.world) <= 1:
+                print(f"Nœud {self.communication.id} seul dans le monde, reste en FOLLOWER")
+                return
+                
+            # Devenir candidat seulement si nécessaire
+            print(f"Nœud {self.communication.id} timeout d'élection - devient CANDIDAT")
             self.communication.transition_to_state(NodeState.CANDIDATE)
