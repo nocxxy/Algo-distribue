@@ -26,6 +26,7 @@ class LeaderState(StateMachine):
                 self.next_node_id = self.communication.id + 1
         
         self.start_heartbeat()
+        self.communication.init_token_ring()
     
     def cleanup(self):
         """Nettoie les timers avant de quitter l'état LEADER"""

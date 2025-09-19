@@ -29,13 +29,16 @@ class Process(Thread):
 
         loop = 0
         while self.alive:
-            
             if self.communication.hasLetterMessage():
                 message = self.communication.retrieveLetterMessage()
                 print(f"[Node {self.myId}] 📩 Reçu: {message}")
-                
+
+
             # Log périodique
             if loop % 100 == 0:  # Toutes les secondes (10ms * 100)
+                self.communication.requestToken()
+                sleep(0.1)  # Simuler une section critique
+                self.communication.releaseToken()
                 print(f"[Node {self.myId}] Loop {loop}")
             
             sleep(0.01)  # 10ms

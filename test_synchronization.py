@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Test de la fonction de synchronisation
-"""
-
 import threading
 import time
 from Process import Process

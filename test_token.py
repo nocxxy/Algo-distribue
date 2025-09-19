@@ -12,8 +12,6 @@ def launch(nbProcess, runningTime=5):
     # Attendre que les processus s'initialisent et élisent un leader
     sleep(runningTime)
 
-    print("=== Arrêt des processus ===")
-
     for p in processes:
         p.stop()
 

@@ -9,6 +9,7 @@ from .IdDistributionMessage import IdAnnouncementMessage, IdConfirmationMessage,
 from .SynchronizeMessage import SynchronizeMessage, SynchronizeConfirmedMessage, AllSynchronizedMessage
 from .BroadcastSyncMessage import BroadcastSyncMessage, BroadcastSyncAckMessage
 from .SendToSyncMessage import SendToSyncMessage, SendToSyncAckMessage
+from .TokenMessage import TokenMessage
 
 __all__ = [
     "AbstractMessage",
@@ -30,4 +31,5 @@ __all__ = [
     "BroadcastSyncAckMessage",
     "SendToSyncMessage",
     "SendToSyncAckMessage",
+    "TokenMessage"
 ]

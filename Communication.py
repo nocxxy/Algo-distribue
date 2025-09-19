@@ -54,6 +54,12 @@ class Communication:
         self.send_to_sync_lock = Lock()  # Verrou pour thread-safety
         self.sync_id_counter = 0  # Compteur pour générer des IDs uniques
 
+        self.request = False
+        self.release = True
+        self.token = None
+        self.token_lock = Lock()  # Verrou pour l'accès au jeton
+        self.have_token = False
+
     def init(self):
         """Initialise la communication et démarre le processus de découverte"""
         PyBus.Instance().register(self, self)
@@ -843,6 +849,7 @@ class Communication:
         
     def retrieveLetterMessage(self):
         """Récupère et supprime le premier message de la boîte aux lettres"""
+        
         with self.mailbox_lock:
             if self.mailbox:
                 return self.mailbox.pop(0)
@@ -890,3 +897,73 @@ class Communication:
             for from_id, sync_info in self.broadcast_sync_waiting.items():
                 sync_info['event'].set()
             self.broadcast_sync_waiting.clear()
+
+    def sendToken(self):
+        """Envoie le token au prochain voisin dans le monde"""
+        if not self.world or self.id is None:
+            print("Nœud n'a pas de voisins ou d'ID assigné")
+            return
+        
+        # Trier les IDs pour déterminer l'ordre circulaire
+        sorted_world = sorted(self.world)
+        my_index = sorted_world.index(self.id)
+        
+        # Trouver le prochain voisin dans l'ordre circulaire
+        next_index = (my_index + 1) % len(sorted_world)
+        next_neighbor = sorted_world[next_index]
+        
+        # Créer et envoyer le message de token
+        with self.token_lock:
+            token_id = self.token
+            self.token = None  # Libérer le token localement
+
+        if self.alive:
+            print("------------------------------------------------")
+            print("-----------------ENVOIE DU TOKEN---------------")
+            print("------------------------------------------------")
+            self.have_token = False
+            token_msg = TokenMessage(self.id, self.get_lamport_timestamp(), token_id=token_id)
+            self.send_message_to(next_neighbor, token_msg)
+            print(f"Nœud {self.id} envoie le token au voisin {next_neighbor}")
+
+    def requestToken(self):
+        self.request = True
+        self.release = False
+        print("------------------------------------------------")
+        print("-----------------DEMANDE DU TOKEN---------------")
+        print("------------------------------------------------")
+        while not self.have_token and self.alive:
+            sleep(1)  # Attente active, peut être optimisée avec des événements
+        print(f"Nœud {self.id} a reçu le token {self.have_token}")
+        return
+
+    def releaseToken(self):
+        print("------------------------------------------------")
+        print("-----------------RELEASE DU TOKEN---------------")
+        print("------------------------------------------------")
+        self.request = False
+        self.release = True
+        return
+
+    @subscribe(threadMode=Mode.PARALLEL, onEvent=TokenMessage)
+    def handle_token_message(self, message):
+        """Gestionnaire pour les messages TokenMessage"""
+        if (message.target != self.id):
+            return  # Message pas pour nous
+        if self.request:
+            with self.token_lock:
+                self.token = message.token_id
+                self.have_token = True
+        
+        while not self.release and self.alive:
+            sleep(1)
+        if self.alive:
+            self.sendToken()
+
+    def init_token_ring(self):
+        if self.state == NodeState.LEADER and self.world:
+            # Le leader initialise le token
+            self.token = random.randint(1000, 9999)  # ID de token aléatoire
+            self.have_token = True
+            print(f"Leader {self.id} initialise le token: {self.token}")
+            self.sendToken()

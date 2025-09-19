@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Test de la fonction broadcastSync
-"""
-
 import time
 import threading
 from Process import Process

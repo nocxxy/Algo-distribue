@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Test des fonctions sendToSync et receiveFromSync
-"""
-
 import time
 import threading
 from Process import Process
