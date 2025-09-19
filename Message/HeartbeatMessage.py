@@ -9,3 +9,4 @@ class HeartbeatMessage(AbstractMessage):
         super().__init__(source, timestamp, target)
         self.term = term
         self.world_nodes = world_nodes  # Monde connu par le leader
+        self.is_system_message = True  # Message système

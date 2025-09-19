@@ -3,19 +3,21 @@ from dataclasses import dataclass
 
 @dataclass
 class SynchronizeMessage(AbstractMessage):
-    """Message de synchronisation de l'état du monde"""
-    def __init__(self, source, timestamp, world_nodes: set, target=None):
-        super().__init__(source, timestamp, target)
-        self.world_nodes = world_nodes  # Ensemble des nœuds connus par l'expéditeur
-
-@dataclass
-class SynchronizeConfirmMessage(AbstractMessage):
-    """Message de confirmation de la synchronisation"""
+    """Message pour initier la synchronisation"""
     def __init__(self, source, timestamp, target=None):
         super().__init__(source, timestamp, target)
+        self.is_system_message = True  # Message système qui peut être traité pendant la synchronisation
+
+@dataclass
+class SynchronizeConfirmedMessage(AbstractMessage):
+    """Message de confirmation de synchronisation envoyé au leader"""
+    def __init__(self, source, timestamp, target=None):
+        super().__init__(source, timestamp, target)
+        self.is_system_message = True  # Message système qui peut être traité pendant la synchronisation
 
 @dataclass
 class AllSynchronizedMessage(AbstractMessage):
-    """Message indiquant que tous les nœuds sont synchronisés"""
+    """Message broadcast par le leader pour signaler que tous les nœuds sont synchronisés"""
     def __init__(self, source, timestamp, target=None):
         super().__init__(source, timestamp, target)
+        self.is_system_message = True  # Message système qui peut être traité pendant la synchronisation

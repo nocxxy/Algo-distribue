@@ -8,6 +8,7 @@ class RequestVoteMessage(AbstractMessage):
         super().__init__(source, timestamp, target)
         self.term = term
         self.candidate_id = candidate_id
+        self.is_system_message = True  # Message système
 
 @dataclass
 class VoteResponseMessage(AbstractMessage):
@@ -16,3 +17,4 @@ class VoteResponseMessage(AbstractMessage):
         super().__init__(source, timestamp, target)
         self.term = term
         self.vote_granted = vote_granted
+        self.is_system_message = True  # Message système
